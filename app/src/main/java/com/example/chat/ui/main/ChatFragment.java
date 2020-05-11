@@ -9,62 +9,85 @@ import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.example.chat.Message;
 import com.example.chat.R;
+import com.firebase.ui.database.FirebaseRecyclerAdapter;
+import com.firebase.ui.database.FirebaseRecyclerOptions;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 
 /**
- * A simple {@link Fragment} subclass.
- * Use the {@link ChatFragment#newInstance} factory method to
- * create an instance of this fragment.
+ * A simple {@link Fragment} subclass
  */
 public class ChatFragment extends Fragment {
-    // TODO: Rename parameter arguments, choose names that match
-    // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-    private static final String ARG_PARAM1 = "param1";
-    private static final String ARG_PARAM2 = "param2";
 
-    // TODO: Rename and change types of parameters
-    private String mParam1;
-    private String mParam2;
+    public static class MessageViewHolder extends RecyclerView.ViewHolder {
+        TextView messageTextView;
+        TextView messengerTextView;
+
+        public MessageViewHolder(View v) {
+            super(v);
+            messageTextView = (TextView) itemView.findViewById(R.id.messageTextView);
+            messengerTextView = (TextView) itemView.findViewById(R.id.messengerTextView);
+        }
+    }
 
     private LoginViewModel viewModel;
 
-    private TextView welcomeTextView;
+    private FirebaseDatabase db;
+
+    private LinearLayoutManager linearLayoutManager;
+
+    private RecyclerView mRecyclerView;
+
+    private FirebaseRecyclerAdapter<Message, MessageViewHolder> mFirebaseAdapter;
+
+    private EditText editTextMessage;
+    private Button sendButton;
 
     public ChatFragment() {
         // Required empty public constructor
     }
 
-    /**
-     * Use this factory method to create a new instance of
-     * this fragment using the provided parameters.
-     *
-     * @param param1 Parameter 1.
-     * @param param2 Parameter 2.
-     * @return A new instance of fragment ChatFragment.
-     */
-    // TODO: Rename and change types and number of parameters
-    public static ChatFragment newInstance(String param1, String param2) {
-        ChatFragment fragment = new ChatFragment();
-        Bundle args = new Bundle();
-        args.putString(ARG_PARAM1, param1);
-        args.putString(ARG_PARAM2, param2);
-        fragment.setArguments(args);
-        return fragment;
-    }
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getArguments() != null) {
-            mParam1 = getArguments().getString(ARG_PARAM1);
-            mParam2 = getArguments().getString(ARG_PARAM2);
-        }
+
+        db  = FirebaseDatabase.getInstance();
+
+        FirebaseRecyclerOptions<Message> options = new FirebaseRecyclerOptions.Builder<Message>()
+                .setQuery(db.getReference().child("messages"), Message.class)
+                .build();
+
+        mFirebaseAdapter = new FirebaseRecyclerAdapter<Message, MessageViewHolder>(options) {
+            @Override
+            protected void onBindViewHolder(@NonNull MessageViewHolder holder, int position, @NonNull Message model) {
+                holder.messageTextView.setText(model.getContent());
+                holder.messengerTextView.setText(model.getName());
+            }
+
+            @NonNull
+            @Override
+            public MessageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                LayoutInflater inflater = LayoutInflater.from(parent.getContext());
+                return new MessageViewHolder(inflater.inflate(R.layout.item_message, parent, false));
+            }
+        };
+
+
     }
 
     @Override
@@ -78,7 +101,7 @@ public class ChatFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(LoginViewModel.class);
-        //        welcomeTextView
+        mRecyclerView = view.findViewById(R.id.messageRecyclerView);
         final NavController navController = Navigation.findNavController(view);
         viewModel.authenticationState.observe(getViewLifecycleOwner(),
                 new Observer<LoginViewModel.AuthenticationState>() {
@@ -86,7 +109,7 @@ public class ChatFragment extends Fragment {
             public void onChanged(LoginViewModel.AuthenticationState authenticationState) {
                 switch (authenticationState) {
                     case AUTHENTICATED:
-                        showWelcomeMessage();
+                        mFirebaseAdapter.startListening();
                         break;
                     case UNAUTHENTICATED:
                         navController.navigate(R.id.login_fragment);
@@ -94,9 +117,65 @@ public class ChatFragment extends Fragment {
                 }
             }
         });
+
+        linearLayoutManager = new LinearLayoutManager(getActivity());
+        linearLayoutManager.setStackFromEnd(true);
+        mRecyclerView.setLayoutManager(linearLayoutManager);
+
+        mFirebaseAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override
+            public void onItemRangeInserted(int positionStart, int itemCount) {
+                super.onItemRangeInserted(positionStart, itemCount);
+                int mCount = mFirebaseAdapter.getItemCount();
+                int lastVisiblePosition = linearLayoutManager.findLastCompletelyVisibleItemPosition();
+                if (lastVisiblePosition == -1 ||
+                        (positionStart >= (mCount - 1) &&
+                                lastVisiblePosition == (positionStart - 1))) {
+                    mRecyclerView.scrollToPosition(positionStart);
+                }
+            }
+        });
+
+        mRecyclerView.setAdapter(mFirebaseAdapter);
+
+        sendButton = view.findViewById(R.id.sendButton);
+        editTextMessage = view.findViewById(R.id.messageEditText);
+        editTextMessage.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (s.toString().trim().length() > 0) {
+                    sendButton.setEnabled(true);
+                } else {
+                    sendButton.setEnabled(false);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+        });
+        sendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                send(editTextMessage.getText().toString());
+                editTextMessage.setText("");
+            }
+        });
     }
 
-    private void showWelcomeMessage() {
-        welcomeTextView.setText("LOGGED IN!");
+    private void showWelcomeMessage(String displayName) {
+
+    }
+
+    private void send(String message) {
+        Message m = new Message(message, viewModel.getDisplayName());
+        DatabaseReference ref = db.getReference().child("messages");
+        ref.push().setValue(m);
     }
 }

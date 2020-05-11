@@ -2,9 +2,11 @@ package com.example.chat.ui.main;
 
 import android.os.Bundle;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -12,8 +14,11 @@ import androidx.navigation.Navigation;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
 
 import com.example.chat.R;
+import com.google.android.material.snackbar.Snackbar;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -31,6 +36,11 @@ public class LoginFragment extends Fragment {
     private String mParam2;
 
     private LoginViewModel viewModel;
+    private EditText usernameEditText;
+    private EditText passwordEditText;
+    private Button loginButton;
+    private Button registerButton;
+
 
     public LoginFragment() {
         // Required empty public constructor
@@ -74,6 +84,53 @@ public class LoginFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(LoginViewModel.class);
+
+        usernameEditText = view.findViewById(R.id.edit_username);
+        passwordEditText = view.findViewById(R.id.edit_password);
+
+        loginButton = view.findViewById(R.id.button_login);
+        loginButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                viewModel.authenticate(usernameEditText.getText().toString(), passwordEditText.getText().toString());
+            }
+        });
+
+        registerButton = view.findViewById(R.id.button_register);
+        registerButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                viewModel.createAccountAndLogin(usernameEditText.getText().toString(), passwordEditText.getText().toString());
+            }
+        });
+
+        final NavController navController = Navigation.findNavController(view);
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),
+                new OnBackPressedCallback(true) {
+                    @Override
+                    public void handleOnBackPressed() {
+                        viewModel.refuseAuthentication();
+                        navController.popBackStack(R.id.main_fragment, false);
+                    }
+                });
+        final View root = view;
+        viewModel.authenticationState.observe(getViewLifecycleOwner(),
+                new Observer<LoginViewModel.AuthenticationState>() {
+                    @Override
+                    public void onChanged(LoginViewModel.AuthenticationState authenticationState) {
+                        switch (authenticationState) {
+                            case AUTHENTICATED:
+                                navController.popBackStack();
+                                break;
+                            case INVALID_AUTHENTICATION:
+                                Snackbar.make(root,
+                                        "INVALID CREDENTIALS",
+                                        Snackbar.LENGTH_SHORT
+                                ).show();
+                                break;
+                        }
+                    }
+                });
 
 
     }
