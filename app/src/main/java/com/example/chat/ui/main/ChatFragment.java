@@ -111,6 +111,7 @@ public class ChatFragment extends Fragment {
                             public void onComplete(@NonNull Task<Uri> task) {
                                 if (task.isSuccessful()) {
                                     String downloadUrl = task.getResult().toString();
+                                    Log.d("TAG-downloadUrl", downloadUrl);
                                     Glide.with(holder.messageImageView.getContext())
                                             .load(downloadUrl)
                                             .into(holder.messageImageView);
@@ -297,6 +298,7 @@ public class ChatFragment extends Fragment {
                                 @Override
                                 public void onComplete(@NonNull Task<Uri> task) {
                                     if(task.isSuccessful()) {
+                                        Log.d("TAG-imgUrl", task.getResult().toString());
                                         Message finishedMessage = new Message(null, old.getName(), task.getResult().toString());
                                         db.getReference().child("messages").child(messageId).setValue(finishedMessage);
                                     }

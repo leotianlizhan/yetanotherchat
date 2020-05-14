@@ -34,6 +34,9 @@ exports.makeUppercase = functions.database.ref('/messages/{pushId}/original')
 exports.sendChatNotification = functions.database.ref('/messages/{messageId}')
   .onCreate(async (snapshot, context) => {
     const newMessage = snapshot.val();
+    if (newMessage.content == undefined) {
+      return;
+    }
     const tokensSnapshot = await admin.database().ref(`/users`).once('value');
     if (!tokensSnapshot.hasChildren()) {
         return console.log('There are no one subscribed to send notification to');
@@ -47,6 +50,47 @@ exports.sendChatNotification = functions.database.ref('/messages/{messageId}')
         }
     }
 
+    var usersObject = tokensSnapshot.val();
+    if (context.authType == 'USER') {
+      delete usersObject[context.auth.uid];
+    }
+    tokens = Object.values(usersObject);
+    
+    const response = await admin.messaging().sendToDevice(tokens, payload);
+    // For each message check if there was an error.
+    const tokensToRemove = [];
+    response.results.forEach((result, index) => {
+      const error = result.error;
+      if (error) {
+        console.error('Failure sending notification to', tokens[index], error);
+        // Cleanup the tokens who are not registered anymore.
+        // if (error.code === 'messaging/invalid-registration-token' ||
+        //     error.code === 'messaging/registration-token-not-registered') {
+        //   tokensToRemove.push(tokensSnapshot.ref.child(tokens[index]).remove());
+        // }
+      }
+    });
+  });
+
+exports.sendChatImageNotification = functions.database.ref('/messages/{messageId}')
+  .onUpdate(async (snapshot, context) => {
+    if (!snapshot.before.val().imgUrl.startsWith("http")) {
+      console.log("cancelled");
+      return;
+    }
+    const tokensSnapshot = await admin.database().ref(`/users`).once('value');
+    if (!tokensSnapshot.hasChildren()) {
+        return console.log('There are no one subscribed to send notification to');
+    }
+    console.log('There are', tokensSnapshot.numChildren(), 'tokens to send notifications to.');
+    var newMessage = snapshot.after.val();
+    const payload = {
+      notification: {
+        title: newMessage.name,
+        image: newMessage.imgUrl
+      }
+    }
+    
     var usersObject = tokensSnapshot.val();
     if (context.authType == 'USER') {
       delete usersObject[context.auth.uid];
