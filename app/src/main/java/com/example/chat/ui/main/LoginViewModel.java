@@ -98,6 +98,11 @@ public class LoginViewModel extends ViewModel {
         else return "PLACEHOLDER (not loggedin)";
     }
 
+    public String getUid() {
+        if (authenticationState.getValue() == AuthenticationState.AUTHENTICATED) return userMutableLiveData.getValue().getUid();
+        else return "PLACEHOLDER (not loggedin)";
+    }
+
     //    private boolean passwordIsValidForUsername(String username, String password) {
 //        mAuth.signInWithEmailAndPassword(username, password).addOnCompleteListener(new OnCompleteListener<AuthResult>() {
 //            @Override
